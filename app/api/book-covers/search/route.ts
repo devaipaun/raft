@@ -63,6 +63,47 @@ function buildSearchQueries(params: {
   return Array.from(new Set(queries));
 }
 
+function levenshtein(a: string, b: string) {
+  const matrix = Array.from({ length: a.length + 1 }, () =>
+    new Array(b.length + 1).fill(0)
+  );
+
+  for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
+  for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
+
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost
+      );
+    }
+  }
+
+  return matrix[a.length][b.length];
+}
+
+function fuzzyScore(a: string, b: string) {
+  const s1 = normalizeSearchText(a);
+  const s2 = normalizeSearchText(b);
+
+  if (!s1 || !s2) return 0;
+
+  const distance = levenshtein(s1, s2);
+  const maxLen = Math.max(s1.length, s2.length);
+
+  const similarity = 1 - distance / maxLen;
+
+  if (similarity > 0.9) return 60;
+  if (similarity > 0.8) return 40;
+  if (similarity > 0.7) return 20;
+
+  return 0;
+}
+
 function scoreTextMatch(searchValue: string, candidateValue: string) {
   const search = normalizeSearchText(searchValue);
   const candidate = normalizeSearchText(candidateValue);
@@ -114,6 +155,7 @@ function scoreCandidate(
     title: string;
     author: string;
   }
+  
 ) {
   const candidateTitle = candidate.title ?? "";
   const candidateAuthor = candidate.author ?? "";
@@ -126,10 +168,14 @@ function scoreCandidate(
     score += scoreTextMatch(params.title, candidateCombined) * 0.4;
   }
 
+  score += fuzzyScore(params.title, candidateTitle) * 1.5;
+ 
   if (params.author) {
     score += scoreTextMatch(params.author, candidateAuthor) * 1.8;
     score += scoreTextMatch(params.author, candidateCombined) * 0.3;
   }
+
+  score += fuzzyScore(params.author, candidateAuthor) * 1.2;
 
   if (params.manualQuery) {
     score += scoreTextMatch(params.manualQuery, candidateCombined) * 1.2;

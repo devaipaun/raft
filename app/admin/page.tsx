@@ -42,6 +42,11 @@ export default function AdminPage() {
   const [isSearchingCovers, setIsSearchingCovers] = useState(false);
 
   const [ocrText, setOcrText] = useState("");
+  const [ocrLines, setOcrLines] = useState<string[]>([]);
+  const [selectedTitleLines, setSelectedTitleLines] = useState<string[]>([]);
+  const [selectedAuthorLines, setSelectedAuthorLines] = useState<string[]>([]);
+  const [selectedPublisherLines, setSelectedPublisherLines] = useState<string[]>([]);
+
   const [coverCandidates, setCoverCandidates] = useState<CoverCandidate[]>([]);
   const [selectedCoverId, setSelectedCoverId] = useState<string | null>(null);
   const [manualCoverQuery, setManualCoverQuery] = useState("");
@@ -119,6 +124,65 @@ export default function AdminPage() {
     loadOptions();
   }, []);
 
+  useEffect(() => {
+    if (selectedTitleLines.length === 0) return;
+
+    setFormData((prev) => ({
+      ...prev,
+      title: selectedTitleLines.join(" ").trim(),
+    }));
+
+    setAutoFilled((prev) => ({
+      ...prev,
+      title: false,
+    }));
+
+    setManualCoverQuery((prev) => {
+      const nextTitle = selectedTitleLines.join(" ").trim();
+      const nextAuthor =
+        selectedAuthorLines.length > 0
+          ? selectedAuthorLines.join(" ").trim()
+          : formData.author.trim();
+
+      if (!nextTitle && !nextAuthor) return prev;
+      return [nextTitle, nextAuthor].filter(Boolean).join(" ");
+    });
+  }, [selectedTitleLines, selectedAuthorLines, formData.author]);
+
+  useEffect(() => {
+    if (selectedAuthorLines.length === 0) return;
+
+    setFormData((prev) => ({
+      ...prev,
+      author: selectedAuthorLines.join(" ").trim(),
+    }));
+
+    setAutoFilled((prev) => ({
+      ...prev,
+      author: false,
+    }));
+
+    setManualCoverQuery((prev) => {
+      const nextTitle =
+        selectedTitleLines.length > 0
+          ? selectedTitleLines.join(" ").trim()
+          : formData.title.trim();
+      const nextAuthor = selectedAuthorLines.join(" ").trim();
+
+      if (!nextTitle && !nextAuthor) return prev;
+      return [nextTitle, nextAuthor].filter(Boolean).join(" ");
+    });
+  }, [selectedAuthorLines, selectedTitleLines, formData.title]);
+
+  useEffect(() => {
+    if (selectedPublisherLines.length === 0) return;
+
+    setFormData((prev) => ({
+      ...prev,
+      publisher: selectedPublisherLines.join(" ").trim(),
+    }));
+  }, [selectedPublisherLines]);
+
   function setUiMessage(
     text: string | null,
     type: "success" | "error" | "info" = "info"
@@ -134,10 +198,16 @@ export default function AdminPage() {
 
     if (name === "title") {
       setAutoFilled((prev) => ({ ...prev, title: false }));
+      setSelectedTitleLines([]);
     }
 
     if (name === "author") {
       setAutoFilled((prev) => ({ ...prev, author: false }));
+      setSelectedAuthorLines([]);
+    }
+
+    if (name === "publisher") {
+      setSelectedPublisherLines([]);
     }
 
     setFormData((prev) => ({
@@ -152,6 +222,10 @@ export default function AdminPage() {
     setFrontImageName(file ? file.name : "");
     setSelectedCoverPreviewUrl(null);
     setOcrText("");
+    setOcrLines([]);
+    setSelectedTitleLines([]);
+    setSelectedAuthorLines([]);
+    setSelectedPublisherLines([]);
     setCoverCandidates([]);
     setSelectedCoverId(null);
     setUiMessage(null);
@@ -162,6 +236,10 @@ export default function AdminPage() {
     setBackFile(file);
     setBackImageName(file ? file.name : "");
     setOcrText("");
+    setOcrLines([]);
+    setSelectedTitleLines([]);
+    setSelectedAuthorLines([]);
+    setSelectedPublisherLines([]);
     setCoverCandidates([]);
     setSelectedCoverId(null);
     setUiMessage(null);
@@ -275,6 +353,83 @@ export default function AdminPage() {
     }
   }
 
+  function toggleTitleLine(line: string) {
+    setSelectedTitleLines((prev) => {
+      if (prev.includes(line)) {
+        const next = prev.filter((item) => item !== line);
+
+        if (next.length === 0) {
+          setFormData((current) => ({
+            ...current,
+            title: autoFilled.title ? "" : current.title,
+          }));
+        }
+
+        return next;
+      }
+
+      return [...prev, line];
+    });
+  }
+
+  function toggleAuthorLine(line: string) {
+    setSelectedAuthorLines((prev) => {
+      if (prev.includes(line)) {
+        const next = prev.filter((item) => item !== line);
+
+        if (next.length === 0) {
+          setFormData((current) => ({
+            ...current,
+            author: autoFilled.author ? "" : current.author,
+          }));
+        }
+
+        return next;
+      }
+
+      return [...prev, line];
+    });
+  }
+
+  function togglePublisherLine(line: string) {
+    setSelectedPublisherLines((prev) => {
+      if (prev.includes(line)) {
+        const next = prev.filter((item) => item !== line);
+
+        if (next.length === 0) {
+          setFormData((current) => ({
+            ...current,
+            publisher: "",
+          }));
+        }
+
+        return next;
+      }
+
+      return [...prev, line];
+    });
+  }
+
+  function clearOcrSelection() {
+    setOcrText("");
+    setOcrLines([]);
+    setSelectedTitleLines([]);
+    setSelectedAuthorLines([]);
+    setSelectedPublisherLines([]);
+    setFormData((prev) => ({
+      ...prev,
+      title: autoFilled.title ? "" : prev.title,
+      author: autoFilled.author ? "" : prev.author,
+    }));
+
+    setAutoFilled({
+      title: false,
+      author: false,
+    });
+
+    setUiMessage("Am ignorat textul detectat din OCR.", "info");
+  }
+
   async function handleScan() {
     if (!frontFile && !backFile) {
       setUiMessage("Selectează cel puțin o imagine.", "error");
@@ -284,6 +439,10 @@ export default function AdminPage() {
     setIsScanning(true);
     setUiMessage("Se extrag informațiile din imagine...", "info");
     setOcrText("");
+    setOcrLines([]);
+    setSelectedTitleLines([]);
+    setSelectedAuthorLines([]);
+    setSelectedPublisherLines([]);
     setCoverCandidates([]);
     setSelectedCoverId(null);
     setSelectedCoverPreviewUrl(null);
@@ -317,6 +476,8 @@ export default function AdminPage() {
           !line.toLowerCase().includes("details") &&
           !/^[^a-zA-ZăâîșțĂÂÎȘȚ0-9]+$/.test(line)
       );
+
+      setOcrLines(cleanLines);
 
       let detectedAuthor = "";
       let detectedTitle = "";
@@ -469,6 +630,10 @@ export default function AdminPage() {
         setFrontImageName("");
         setBackImageName("");
         setOcrText("");
+        setOcrLines([]);
+        setSelectedTitleLines([]);
+        setSelectedAuthorLines([]);
+        setSelectedPublisherLines([]);
         setCoverCandidates([]);
         setSelectedCoverId(null);
         setManualCoverQuery("");
@@ -829,6 +994,9 @@ export default function AdminPage() {
                                 .join(" ")
                             );
 
+                            setSelectedTitleLines([]);
+                            setSelectedAuthorLines([]);
+
                             setAutoFilled({
                               title: false,
                               author: false,
@@ -869,12 +1037,103 @@ export default function AdminPage() {
                 </div>
               ) : null}
 
+              {isScanning ? (
+                <div className="mt-4 rounded-xl border border-blue-500/40 bg-blue-500/5 p-4">
+                  <div className="flex items-center gap-3">
+                    <span className="h-5 w-5 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
+                    <div>
+                      <p className="text-sm font-semibold text-blue-200">
+                        Se citesc imaginile și se extrage textul...
+                      </p>
+                      <p className="text-xs text-blue-300/80">
+                        Analizăm fața și spatele cărții.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
               {ocrText ? (
                 <div className="mt-4 rounded-xl border border-zinc-800 p-3 text-xs text-zinc-400">
                   <p className="mb-2 font-semibold text-zinc-300">
                     Text detectat:
                   </p>
                   <pre className="whitespace-pre-wrap">{ocrText}</pre>
+                </div>
+              ) : null}
+
+              {ocrLines.length > 0 ? (
+                <div className="mt-4 rounded-xl border border-zinc-800 p-3">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-zinc-300">
+                      Selectează din textul detectat
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={clearOcrSelection}
+                      className="rounded-lg border border-amber-500 bg-amber-500/10 px-3 py-1 text-xs text-amber-300 transition hover:bg-amber-500/20"
+                    >
+                      Nimic util
+                    </button>
+                  </div>
+
+                  <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
+                    {ocrLines.map((line, index) => {
+                      const isSelectedForTitle = selectedTitleLines.includes(line);
+                      const isSelectedForAuthor = selectedAuthorLines.includes(line);
+                      const isSelectedForPublisher = selectedPublisherLines.includes(line);
+
+                      return (
+                        <div
+                          key={`${line}-${index}`}
+                          className="rounded-lg border border-zinc-800 bg-zinc-950 p-2"
+                        >
+                          <p className="mb-2 text-sm text-zinc-300">{line}</p>
+
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => toggleTitleLine(line)}
+                              className={`rounded-lg px-2 py-1 text-xs transition ${
+                                isSelectedForTitle
+                                  ? "border border-blue-400 bg-blue-500/20 text-blue-300"
+                                  : "border border-zinc-700 text-blue-400 hover:bg-zinc-800"
+                              }`}
+                            >
+                              {isSelectedForTitle ? "Scoate din titlu" : "Adaugă la titlu"}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => toggleAuthorLine(line)}
+                              className={`rounded-lg px-2 py-1 text-xs transition ${
+                                isSelectedForAuthor
+                                  ? "border border-green-400 bg-green-500/20 text-green-300"
+                                  : "border border-zinc-700 text-green-400 hover:bg-zinc-800"
+                              }`}
+                            >
+                              {isSelectedForAuthor ? "Scoate din autor" : "Adaugă la autor"}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => togglePublisherLine(line)}
+                              className={`rounded-lg px-2 py-1 text-xs transition ${
+                                isSelectedForPublisher
+                                  ? "border border-purple-400 bg-purple-500/20 text-purple-300"
+                                  : "border border-zinc-700 text-purple-400 hover:bg-zinc-800"
+                              }`}
+                            >
+                              {isSelectedForPublisher
+                                ? "Scoate din editură"
+                                : "Adaugă la editură"}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               ) : null}
             </div>
