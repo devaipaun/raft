@@ -258,8 +258,6 @@ export default function AdminPage() {
     try {
       const candidates = await searchCoverCandidates({
         query: manualQuery,
-        title,
-        author,
       });
 
       setCoverCandidates(candidates);
