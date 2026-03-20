@@ -45,6 +45,9 @@ export default function AdminPage() {
   const [coverCandidates, setCoverCandidates] = useState<CoverCandidate[]>([]);
   const [selectedCoverId, setSelectedCoverId] = useState<string | null>(null);
   const [manualCoverQuery, setManualCoverQuery] = useState("");
+  const [selectedCoverPreviewUrl, setSelectedCoverPreviewUrl] = useState<
+    string | null
+  >(null);
 
   const [autoFilled, setAutoFilled] = useState({
     title: false,
@@ -66,6 +69,8 @@ export default function AdminPage() {
     if (!backFile) return null;
     return URL.createObjectURL(backFile);
   }, [backFile]);
+
+  const displayedFrontPreviewUrl = selectedCoverPreviewUrl || frontPreviewUrl;
 
   useEffect(() => {
     const checkUser = async () => {
@@ -145,6 +150,7 @@ export default function AdminPage() {
     const file = e.target.files?.[0] ?? null;
     setFrontFile(file);
     setFrontImageName(file ? file.name : "");
+    setSelectedCoverPreviewUrl(null);
     setOcrText("");
     setCoverCandidates([]);
     setSelectedCoverId(null);
@@ -169,58 +175,58 @@ export default function AdminPage() {
   }
 
   async function resizeImageForCover(file: File): Promise<Blob> {
-  const imageUrl = URL.createObjectURL(file);
+    const imageUrl = URL.createObjectURL(file);
 
-  try {
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const image = new Image();
-      image.onload = () => resolve(image);
-      image.onerror = reject;
-      image.src = imageUrl;
-    });
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = reject;
+        image.src = imageUrl;
+      });
 
-    const maxWidth = 600;
-    const maxHeight = 900;
+      const maxWidth = 600;
+      const maxHeight = 900;
 
-    let { width, height } = img;
+      let { width, height } = img;
 
-    const scale = Math.min(maxWidth / width, maxHeight / height, 1);
+      const scale = Math.min(maxWidth / width, maxHeight / height, 1);
 
-    const targetWidth = Math.round(width * scale);
-    const targetHeight = Math.round(height * scale);
+      const targetWidth = Math.round(width * scale);
+      const targetHeight = Math.round(height * scale);
 
-    const canvas = document.createElement("canvas");
-    canvas.width = targetWidth;
-    canvas.height = targetHeight;
+      const canvas = document.createElement("canvas");
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
 
-    const ctx = canvas.getContext("2d");
+      const ctx = canvas.getContext("2d");
 
-    if (!ctx) {
-      throw new Error("Canvas context indisponibil.");
+      if (!ctx) {
+        throw new Error("Canvas context indisponibil.");
+      }
+
+      ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob(resolve, "image/jpeg", 0.8);
+      });
+
+      if (!blob) {
+        throw new Error("Nu am putut comprima imaginea.");
+      }
+
+      return blob;
+    } finally {
+      URL.revokeObjectURL(imageUrl);
     }
-
-    ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
-
-    const blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob(resolve, "image/jpeg", 0.8);
-    });
-
-    if (!blob) {
-      throw new Error("Nu am putut comprima imaginea.");
-    }
-
-    return blob;
-  } finally {
-    URL.revokeObjectURL(imageUrl);
   }
-}
 
   async function searchCoverCandidates(params: {
     query?: string;
     title?: string;
     author?: string;
   }) {
-    const res = await fetch("/api/books-covers/search", {
+    const res = await fetch("/api/book-covers/search", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -235,17 +241,25 @@ export default function AdminPage() {
   }
 
   async function handleManualCoverSearch() {
-    if (!manualCoverQuery.trim()) {
+    const manualQuery = manualCoverQuery.trim();
+    const title = formData.title.trim();
+    const author = formData.author.trim();
+
+    if (!manualQuery && !title && !author) {
       setUiMessage("Scrie ceva pentru căutarea manuală a copertei.", "error");
       return;
     }
 
     setIsSearchingCovers(true);
     setSelectedCoverId(null);
+    setCoverCandidates([]);
+    setUiMessage(null);
 
     try {
       const candidates = await searchCoverCandidates({
-        query: manualCoverQuery.trim(),
+        query: manualQuery,
+        title,
+        author,
       });
 
       setCoverCandidates(candidates);
@@ -274,6 +288,7 @@ export default function AdminPage() {
     setOcrText("");
     setCoverCandidates([]);
     setSelectedCoverId(null);
+    setSelectedCoverPreviewUrl(null);
 
     try {
       let combinedText = "";
@@ -376,7 +391,7 @@ export default function AdminPage() {
     const filePath = `covers/${Date.now()}-${filenameBase}.${extension}`;
 
     const { error } = await supabase.storage
-      .from("books-covers")
+      .from("book-covers")
       .upload(filePath, blob, {
         contentType,
         upsert: false,
@@ -386,7 +401,7 @@ export default function AdminPage() {
       throw new Error(error.message);
     }
 
-    const { data } = supabase.storage.from("books-covers").getPublicUrl(filePath);
+    const { data } = supabase.storage.from("book-covers").getPublicUrl(filePath);
     return data.publicUrl;
   }
 
@@ -417,15 +432,15 @@ export default function AdminPage() {
           "external-cover",
           blob.type || "image/jpeg"
         );
-     } else if (frontFile) {
-       const resizedBlob = await resizeImageForCover(frontFile);
+      } else if (frontFile) {
+        const resizedBlob = await resizeImageForCover(frontFile);
 
-       coverUrl = await uploadBlobToStorage(
-        resizedBlob,
-        "uploaded-front-cover",
-        "image/jpeg"
-    );
-}
+        coverUrl = await uploadBlobToStorage(
+          resizedBlob,
+          "uploaded-front-cover",
+          "image/jpeg"
+        );
+      }
 
       const supabase = createClient();
 
@@ -459,6 +474,7 @@ export default function AdminPage() {
         setCoverCandidates([]);
         setSelectedCoverId(null);
         setManualCoverQuery("");
+        setSelectedCoverPreviewUrl(null);
         setAutoFilled({
           title: false,
           author: false,
@@ -508,7 +524,7 @@ export default function AdminPage() {
           <div className="grid gap-6 lg:grid-cols-[1fr_430px]">
             <form
               onSubmit={handleSubmit}
-              className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 space-y-4"
+              className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-6"
             >
               <div>
                 <input
@@ -660,18 +676,18 @@ export default function AdminPage() {
               <div className="grid gap-4">
                 <div>
                   <p className="mb-2 text-xs uppercase text-zinc-500">Față</p>
-                  {frontPreviewUrl ? (
+                  {displayedFrontPreviewUrl ? (
                     <button
                       type="button"
                       onClick={() => {
-                        setZoomedImageUrl(frontPreviewUrl);
+                        setZoomedImageUrl(displayedFrontPreviewUrl);
                         setZoomedImageLabel("Preview față");
                       }}
                       className="block w-full"
                     >
                       <div className="flex h-[220px] items-center justify-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
                         <img
-                          src={frontPreviewUrl}
+                          src={displayedFrontPreviewUrl}
                           alt="Preview față"
                           className="h-full w-full object-contain"
                         />
@@ -726,31 +742,103 @@ export default function AdminPage() {
                     type="button"
                     onClick={handleManualCoverSearch}
                     disabled={isSearchingCovers}
-                    className="rounded-xl border border-zinc-700 px-4 text-sm text-white"
+                    className={`flex items-center justify-center gap-2 rounded-xl px-4 text-sm text-white transition ${
+                      isSearchingCovers
+                        ? "cursor-not-allowed border border-blue-500 bg-blue-600/20 text-blue-200"
+                        : "border border-zinc-700 bg-zinc-900 hover:bg-zinc-800"
+                    }`}
                   >
+                    {isSearchingCovers ? (
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
+                    ) : null}
+
                     {isSearchingCovers ? "Caut..." : "Caută"}
                   </button>
                 </div>
               </div>
 
-              {coverCandidates.length > 0 ? (
+              {isSearchingCovers ? (
+                <div className="mt-6">
+                  <p className="mb-3 text-sm font-semibold text-zinc-300">
+                    Căutăm câteva variante de copertă...
+                  </p>
+
+                  <div className="grid gap-3">
+                    {[1, 2, 3].map((item) => (
+                      <div
+                        key={item}
+                        className="flex animate-pulse items-center gap-3 rounded-xl border border-zinc-700 p-3"
+                      >
+                        <div className="h-20 w-14 rounded bg-zinc-800" />
+
+                        <div className="flex-1 space-y-2">
+                          <div className="h-4 w-3/4 rounded bg-zinc-800" />
+                          <div className="h-3 w-1/2 rounded bg-zinc-800" />
+                          <div className="h-3 w-1/3 rounded bg-zinc-800" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : coverCandidates.length > 0 ? (
                 <div className="mt-6">
                   <p className="mb-3 text-sm font-semibold text-zinc-300">
                     Coperți găsite
                   </p>
 
-                  <div className="grid gap-3">
+                  <div className="grid max-h-[420px] gap-3 overflow-y-auto pr-1">
                     {coverCandidates.map((candidate) => (
                       <button
                         key={candidate.id}
                         type="button"
                         onClick={() => {
+                          const hasExistingData =
+                            !!formData.title.trim() ||
+                            !!formData.author.trim() ||
+                            !!formData.publisher.trim();
+
+                          const hasExistingFrontPreview =
+                            !!displayedFrontPreviewUrl;
+
+                          let shouldReplaceData = true;
+                          let shouldReplacePreview = true;
+
+                          if (hasExistingData) {
+                            shouldReplaceData = window.confirm(
+                              "Există deja informații completate. Vrei să le înlocuiești cu cele de pe copertă?"
+                            );
+                          }
+
+                          if (hasExistingFrontPreview) {
+                            shouldReplacePreview = window.confirm(
+                              "Există deja o imagine în preview-ul din față. Vrei să o înlocuiești cu coperta selectată?"
+                            );
+                          }
+
                           setSelectedCoverId(candidate.id);
-                          if (!formData.publisher && candidate.publisher) {
+
+                          if (shouldReplaceData) {
                             setFormData((prev) => ({
                               ...prev,
-                              publisher: candidate.publisher ?? prev.publisher,
+                              title: candidate.title ?? "",
+                              author: candidate.author ?? "",
+                              publisher: candidate.publisher ?? "",
                             }));
+
+                            setManualCoverQuery(
+                              [candidate.title, candidate.author]
+                                .filter(Boolean)
+                                .join(" ")
+                            );
+
+                            setAutoFilled({
+                              title: false,
+                              author: false,
+                            });
+                          }
+
+                          if (shouldReplacePreview) {
+                            setSelectedCoverPreviewUrl(candidate.imageUrl);
                           }
                         }}
                         className={`flex items-center gap-3 rounded-xl border p-3 text-left transition ${

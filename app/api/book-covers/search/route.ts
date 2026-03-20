@@ -9,6 +9,14 @@ type CoverCandidate = {
   imageUrl: string;
 };
 
+function normalizeSearchText(value: string = "") {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 async function searchGoogleBooks(query: string) {
   const results: CoverCandidate[] = [];
 
@@ -90,12 +98,24 @@ export async function POST(req: NextRequest) {
     const title = String(body.title ?? "").trim();
     const author = String(body.author ?? "").trim();
 
-    const queries = [
-      manualQuery,
-      [title, author].filter(Boolean).join(" ").trim(),
-      title,
-      author,
-    ].filter(Boolean);
+    const normalizedManualQuery = normalizeSearchText(manualQuery);
+    const normalizedTitle = normalizeSearchText(title);
+    const normalizedAuthor = normalizeSearchText(author);
+
+    const queries = Array.from(
+      new Set(
+        [
+          manualQuery,
+          normalizedManualQuery,
+          [title, author].filter(Boolean).join(" ").trim(),
+          [normalizedTitle, normalizedAuthor].filter(Boolean).join(" ").trim(),
+          title,
+          normalizedTitle,
+          author,
+          normalizedAuthor,
+        ].filter(Boolean)
+      )
+    );
 
     const allCandidates: CoverCandidate[] = [];
 
@@ -105,11 +125,11 @@ export async function POST(req: NextRequest) {
 
       const combined = [...googleCandidates, ...openLibraryCandidates];
 
-      for (const candidate of combined) {
-        allCandidates.push(candidate);
-      }
+      allCandidates.push(...combined);
 
-      if (allCandidates.length > 0) break;
+      if (allCandidates.length > 0) {
+        break;
+      }
     }
 
     const unique = allCandidates.filter(
@@ -118,7 +138,7 @@ export async function POST(req: NextRequest) {
     );
 
     return NextResponse.json({
-      candidates: unique.slice(0, 3),
+      candidates: unique.slice(0, 10),
     });
   } catch (error) {
     console.error("BOOK COVER SEARCH ERROR:", error);
