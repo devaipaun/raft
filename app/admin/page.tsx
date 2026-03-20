@@ -583,14 +583,7 @@ export default function AdminPage() {
       );
 
       if (selectedCover) {
-        const response = await fetch(selectedCover.imageUrl);
-        const blob = await response.blob();
-
-        coverUrl = await uploadBlobToStorage(
-          blob,
-          "external-cover",
-          blob.type || "image/jpeg"
-        );
+        coverUrl = selectedCover.imageUrl;
       } else if (frontFile) {
         const resizedBlob = await resizeImageForCover(frontFile);
 
